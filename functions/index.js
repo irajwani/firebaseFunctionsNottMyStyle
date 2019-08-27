@@ -136,7 +136,7 @@ function removeFalsyValuesFrom(object) {
 //     return null;
 // } );
 
-// //TODO: reawaken
+// //TODO: reawaken 
 // //FUNCTION NUMBAH 2
 // //Going to assume people will only change their pictures, and not their names
 // exports.updateOldUser = functions.database.ref('/Users/{uid}/{profile}/uri').onWrite( 
@@ -161,7 +161,7 @@ function removeFalsyValuesFrom(object) {
 // } );
 
 
-//FUNCTION NUMBAH 2.99
+//FUNCTION NUMBAH 3
 //Delete product from products branch if user deletes product from personal user branch
 
 exports.deleteProductFromProducts = functions.database.ref('/Users/{uid}/products/{key}').onDelete(
@@ -173,7 +173,7 @@ exports.deleteProductFromProducts = functions.database.ref('/Users/{uid}/product
     }
 )
 
-//FUNCTION NUMBAH 3
+//FUNCTION NUMBAH 4
 //Problem: When user deletes all products, it wipes away the whole products branch. 
 //Fix: This func creates an empty products branch for the user.
 
@@ -332,8 +332,8 @@ exports.updateEmptyProducts = functions.database.ref('/Users/{uid}/products').on
 
 
 
-//FUNCTION NUMBAH 5 ?
-//TODO: reawaken
+//FUNCTION NUMBAH 5 
+//TODO: Unnecessarily expensive. Split into smaller functions depending on use case
 exports.updateProducts = functions.database.ref('Users/{uid}/products').onWrite(
     (snapshot, context) => {
         // console.log('Initializing Reconstruction of Products Branch');
@@ -341,7 +341,7 @@ exports.updateProducts = functions.database.ref('Users/{uid}/products').onWrite(
         // console.log(`After: ${snapshot.after.val()}`)
         admin.database().ref().once("value", (dataFromReference) => {
             var d = dataFromReference.val();
-            var suggestedDiscount = 0.80;
+            var suggestedDiscount = 0.90;
             var uids = Object.keys(d.Users);
             // console.log(uids)
             var keys = [];
@@ -363,95 +363,118 @@ exports.updateProducts = functions.database.ref('Users/{uid}/products').onWrite(
 
                   
 
-                if( !(i > keys.length - 1) && (i <= keys.length - 1)  && (Object.keys(d.Users[uid]).includes('products')) && (Object.keys(d.Users[uid].products).includes(key)) ) {
+                if( !(i > keys.length - 1) && (i <= keys.length - 1)  && (Object.keys(d.Users[uid]).includes('products')) && (Object.keys(d.Users[uid].products).includes(key))) {
                     
                     // console.log(key, uid, i, keys.length);
-                            
                     var daysElapsed;
                     var currentProduct = d.Users[uid].products[key];
+                    var userCountry = d.Users[uid].profile.country;
+                    userCountry = userCountry.replace(/\s+/g, '').split(',')[1];
 
-                    daysElapsed = timeSince(d.Users[uid].products[key].text.time);
-                    //TODO: condition: daysElapsed >= 6
-                    var shouldReducePrice = (daysElapsed >= 6) && (currentProduct.text.sold === false) ? true : false;
-
-                    if(shouldReducePrice) {
-                        var priceReductionNotificationUpdate = {};
-                        var currentNotificationRef = `/Users/${uid}/notifications/priceReductions/${key}/`;
-                        //New process where we try to eliminate usage of localNotificationSent and base it on time
-                        //create fresh new Obj if it's the first time, which can be verified from if whether 
-                        //this notification already exists in user's branch for priceReductionNotifications
-                        var isFirstTime = !(Object.keys(d.Users[uid].notifications.priceReductions).includes(key)) || typeof d.Users[uid].notifications.priceReductions === "undefined";
+                    if(currentProduct.uris !== undefined) {
                         
-                        if(isFirstTime) {
-                            var notificationPostData = {
 
-                            name: currentProduct.text.name,
-                            brand: currentProduct.text.brand,
-                            price: currentProduct.text.price, //the selling price the user agreed to post this item for
-                            uri: currentProduct.uris.thumbnail[0],
-                            daysElapsed: daysElapsed,
-                            message: `Nobody has initiated a chat about, ${currentProduct.text.name} from ${currentProduct.text.brand} yet, since its submission on the market ${currentProduct.text.daysElapsed} days ago 🤔. Consider a price reduction from £${currentProduct.text.price} \u2192 £${Math.floor(suggestedDiscount*currentProduct.text.price)}?`,
+                        daysElapsed = timeSince(currentProduct.text.time);
+                        //TODO: condition: daysElapsed >= 6
+                        var shouldReducePrice = (daysElapsed >= 6) && (currentProduct.text.sold === false) ? true : false;
 
-                            //pre-set a boolean to check if whether localNotification has been scheduled from client-side.
-                            uid: uid,
-                            key: key,
-                            //set this to true after it has been marked as true from client side, possibly faulty logic
-                            localNotificationSent: false,
-                            // localNotificationSent: d.Users[uid].notifications.priceReductions[key].localNotificationSent !== undefined ? d.Users[uid].notifications.priceReductions[key].localNotificationSent === true ? true : false : false,
-                            // localNotificationSent: d.Users[uid].notifications ? d.Users[uid].notifications.priceReductions ? d.Users[uid].notifications.priceReductions[key].localNotificationSent === true ? true : false : false : false,
-                            /// Should we just force empty address properties here?
-                            // address:
+                        if(shouldReducePrice) {
+                            var priceReductionNotificationUpdate = {};
+                            var currentNotificationRef = `/Users/${uid}/notifications/priceReductions/${key}/`;
+                            //New process where we try to eliminate usage of localNotificationSent and base it on time
+                            //create fresh new Obj if it's the first time, which can be verified from if whether 
+                            //this notification already exists in user's branch for priceReductionNotifications
+
+                            //TODO: But what if the user has no priceReduction Notifications, let alone any notifications yet
+                            var isFirstTime = d.Users[uid].notifications === undefined || d.Users[uid].notifications.priceReductions === undefined || !(Object.keys(d.Users[uid].notifications.priceReductions).includes(key)); 
+                            //trivial || trivial || price reduction notification has never been there for this particular product's
+                            let firstName = d.Users[uid].profile.name.split(" ")[0];
+                            let message = `Hey ${firstName},\nWe noticed your item,  ${currentProduct.text.name}, still hasn't sold. We suggest lowering it to £${Math.floor(suggestedDiscount*currentProduct.text.price)} in order to have a better chance of selling your item.`;
+                            if(isFirstTime) {
+                                
+                                var notificationPostData = {
+
+                                name: currentProduct.text.name,
+                                brand: currentProduct.text.brand,
+                                price: currentProduct.text.price, //the selling price the user agreed to post this item for
+                                uri: currentProduct.uris.thumbnail[0],
+                                daysElapsed: daysElapsed,
+                                message: message,
+                                // message: `Nobody has initiated a chat about, ${currentProduct.text.name} from ${currentProduct.text.brand} yet, since its submission on the market ${currentProduct.text.daysElapsed} days ago 🤔. Consider a price reduction from £${currentProduct.text.price} \u2192 £${Math.floor(suggestedDiscount*currentProduct.text.price)}?`,
+
+                                //pre-set a boolean to check if whether localNotification has been scheduled from client-side.
+                                uid: uid,
+                                key: key,
+                                //set this to true after it has been marked as true from client side, possibly faulty logic
+                                localNotificationSent: false,
+                                // localNotificationSent: d.Users[uid].notifications.priceReductions[key].localNotificationSent !== undefined ? d.Users[uid].notifications.priceReductions[key].localNotificationSent === true ? true : false : false,
+                                // localNotificationSent: d.Users[uid].notifications ? d.Users[uid].notifications.priceReductions ? d.Users[uid].notifications.priceReductions[key].localNotificationSent === true ? true : false : false : false,
+                                /// Should we just force empty address properties here?
+                                // address:
+                                
+                                //mark as unread
+                                // unreadCount: true,
+                                unreadCount: true,
+                                selected: false,
+                                
+                                }
+                                //now update the singular sub-branch with entire object as it's the first time
+                                priceReductionNotificationUpdate[currentNotificationRef] = notificationPostData;
+                            }
+
+                            else {
+                                //this object already exists in priceReductionNotifications,
+                                //notifications have sent if person has opened the app,
+                                //unreadCount is untampered
+                                priceReductionNotificationUpdate[currentNotificationRef + '/name'] = currentProduct.text.name;
+                                priceReductionNotificationUpdate[currentNotificationRef + '/brand'] = currentProduct.text.brand;
+                                priceReductionNotificationUpdate[currentNotificationRef + '/price'] = currentProduct.text.price;
+                                priceReductionNotificationUpdate[currentNotificationRef + '/uri'] = currentProduct.uris.thumbnail[0];
+                                priceReductionNotificationUpdate[currentNotificationRef + '/daysElapsed'] = daysElapsed;
+                                priceReductionNotificationUpdate[currentNotificationRef + '/message'] = message;
+                                priceReductionNotificationUpdate[currentNotificationRef + '/uid'] = uid;
+                                priceReductionNotificationUpdate[currentNotificationRef + '/key'] = key;
+                                priceReductionNotificationUpdate[currentNotificationRef + '/selected'] = false;
+                            }
+
+
+                            // console.log(notificationPostData);
                             
-                            //mark as unread
-                            // unreadCount: true,
-                            unreadCount: true,
-                            selected: false,
-                            
+                            admin.database().ref().update(priceReductionNotificationUpdate)
+
                         }
-                        //now update the singular sub-branch with entire object as it's the first time
-                        priceReductionNotificationUpdate[currentNotificationRef] = notificationPostData;
+
+                        // console.log("The current index and product identifier is: " + i, postData.key);    
+                        console.log("The current Uris obj is: " + currentProduct.uris);
+                        console.log(currentProduct);    
+
+                        postData = {
+                            key: key, uid: uid, 
+                            location: userCountry,
+                            uris: {source: currentProduct.uris.source, thumbnail: currentProduct.uris.thumbnail, pd: currentProduct.uris.pd}, 
+                            //TODO: below is why uris gets tacked on as extra property
+                            text: currentProduct.text, daysElapsed: daysElapsed, 
+                            //set property right now to easen burden on notification scheduling chain
+                            shouldReducePrice: shouldReducePrice ? true : false,
+                        }
+
+                        
+                        
+                        
+                        updates = {};
+
+                        // updates['/Products/' + i + '/'] = postData;
+                        updates['/Products/' + key + '/'] = postData;
+                        // updates['/Products/' + userCountry +  + key + '/'] = postData;
+                        admin.database().ref().update(updates);
                     }
 
                     else {
-                        //this object already exists in priceReductionNotifications,
-                        //notifications have sent if person has opened the app,
-                        //unreadCount is untampered
-                        priceReductionNotificationUpdate[currentNotificationRef + '/name'] = currentProduct.text.name;
-                        priceReductionNotificationUpdate[currentNotificationRef + '/brand'] = currentProduct.text.brand;
-                        priceReductionNotificationUpdate[currentNotificationRef + '/price'] = currentProduct.text.price;
-                        priceReductionNotificationUpdate[currentNotificationRef + '/uri'] = currentProduct.uris.thumbnail[0];
-                        priceReductionNotificationUpdate[currentNotificationRef + '/daysElapsed'] = daysElapsed;
-                        priceReductionNotificationUpdate[currentNotificationRef + '/message'] = `Nobody has initiated a chat about, ${currentProduct.text.name} from ${currentProduct.text.brand} yet, since its submission on the market ${currentProduct.text.daysElapsed} days ago 🤔. Consider a price reduction from £${currentProduct.text.price} \u2192 £${Math.floor(suggestedDiscount*currentProduct.text.price)}?`;
-                        priceReductionNotificationUpdate[currentNotificationRef + '/uid'] = uid;
-                        priceReductionNotificationUpdate[currentNotificationRef + '/key'] = key;
-                        priceReductionNotificationUpdate[currentNotificationRef + '/selected'] = false;
+                        //TODO: Delete product without interrupting this upload flow.
+                        console.log('skipping product as it does not have URIs')
                     }
-
-
-                        // console.log(notificationPostData);
-                        
-                        admin.database().ref().update(priceReductionNotificationUpdate)
-
-                    }
-                        
-                    postData = {
-                        key: key, uid: uid, 
-                        uris: {source: currentProduct.uris.source, thumbnail: currentProduct.uris.thumbnail, pd: currentProduct.uris.pd}, 
-                        //TODO: below is why uris gets tacked on as extra property
-                        text: currentProduct.text, daysElapsed: daysElapsed, 
-                        //set property right now to easen burden on notification scheduling chain
-                        shouldReducePrice: shouldReducePrice ? true : false,
-                    }
-
-                    console.log(postData);
                     
-                    console.log("The current index and product identifier is: " + i, postData.key);    
-                    console.log("The current Uris obj is: " + currentProduct.uris);
-                    console.log(currentProduct);
-                    updates = {};   
-                    // updates['/Products/' + i + '/'] = postData;
-                    updates['/Products/' + key + '/'] = postData;
-                    admin.database().ref().update(updates);
+                    
                     i++;
                     // console.log(i);
     
@@ -479,10 +502,180 @@ exports.updateProducts = functions.database.ref('Users/{uid}/products').onWrite(
     }
 )
 
+exports.updateAppUsage = functions.database.ref('Users/{uid}/profile/status').onWrite((snapshot, context) => {
+    if(snapshot.after.val() === "online") {
+        let {uid} = context.params;
+        admin.database().ref(`/Users/${uid}/appUsage/`).once("value", (dataFromReference) => {
+            var currentCount = dataFromReference.val();
+            let updates = {};
+            updates[`/Users/${context.params.uid}/appUsage/`] = currentCount + 1;
+            firebase.database().ref().update(updates);
+        })
+    }
+
+    else {
+        return null
+    }
+})
+
+
+// exports.storePicturesOnDatabase = functions.storage.object().onFinalize(
+//     (object) => {
+//         // console.log("filePath is: " + object.name);
+//         const name = object.selfLink.replace(`https://www.googleapis.com/storage/v1/b/${object.bucket}/o/`,'');
+//         var productInformationURL = `https://firebasestorage.googleapis.com/v0/b/${object.bucket}/o/${name}?alt=media&token=${object.metadata.firebaseStorageDownloadTokens}`.replace(`https://firebasestorage.googleapis.com/v0/b/${object.bucket}/o/Users`, '')
+//         productInformationURL = productInformationURL.replace(`?alt=media&token=${object.metadata.firebaseStorageDownloadTokens}`, '')
+//         var strings = productInformationURL.split('%2F');
+//         var uid = strings[1], productKey = strings[2], imageName = strings[3];
+//         var updates = {};
+//         const bucket = admin.storage().bucket();
+//         const file = bucket.file(object.name);
+      
+//         const options = {
+//           action: 'read',
+//           expires: '03-17-2025'
+//         };  file.getSignedUrl
+      
+//         // Get a signed URL for the file
+//         file.getSignedUrl(options).then(results => {
+//             var downloadURL = results[0];
+//             if(strings.length === 4) {
+//                 var type, index;
+//                 console.log(imageName);
+//                 if(imageName === '0') {
+//                     type = 'source'
+//                     index = 0
+//                 }
+        
+//                 else if(imageName === '0-pd') {
+//                     type = 'pd'
+//                     index = 0
+//                 }
+        
+//                 else if(imageName === '0-thumbnail') {
+//                     type = 'pd'
+//                     index = 0
+//                 }
+        
+//                 else if(imageName === '1') {
+//                     type = 'source'
+//                     index = 1
+//                 }
+        
+//                 else if(imageName === '1-pd') {
+//                     type = 'pd'
+//                     index = 1
+//                 }
+        
+//                 else if(imageName === '1-thumbnail') {
+//                     type = 'thumbnail'
+//                     index = 1
+//                 }
+        
+//                 else if(imageName === '2') {
+//                     type = 'source'
+//                     index = 2
+//                 }
+        
+//                 else if(imageName === '2-pd') {
+//                     type = 'pd'
+//                     index = 2
+//                 }
+        
+//                 else if(imageName === '2-thumbnail') {
+//                     type = 'thumbnail'
+//                     index = 2
+//                 }
+        
+//                 else if(imageName === '3') {
+//                     type = 'source'
+//                     index = 3
+//                 }
+        
+//                 else if(imageName === '3-pd') {
+//                     type = 'pd'
+//                     index = 3
+//                 }
+        
+//                 else if(imageName === '3-thumbnail') {
+//                     type = 'thumbnail'
+//                     index = 3
+//                 }
+        
+//                 updates['/Users/' + uid + '/products/' + productKey + '/uris/' + type + '/' + index + '/'] = downloadURL;
+//                 admin.database().ref().update(updates);
+//             }
+    
+//             else {
+//                 console.log('Doing nothing');
+//                 // updates['/Users/' + uid + '/profile/uri/'] = downloadURL
+//             }
+            
+//             return null;
+//           })
+//           .catch(err => {
+//               console.log(err)
+//           })
+      
+        
+
+        
+        
+//         // return null
+
+// });
+
+//correct download URL
+
+// https://firebasestorage.googleapis.com/v0/b/nottmystyle-447aa.appspot.com/o/Users%2FLJ5iio1mhoQRoN0cZfGLPwrYp2B3%2F-LlJhrKxjt91ZjL3K8m8%2F2-pd?alt=media&token=00223a56-28ae-4690-ad67-274ebbe03eb0
+// "https://firebasestorage.googleapis.com/v0/b/nottmystyle-447aa.appspot.com/o/Users%2FLJ5iio1mhoQRoN0cZfGLPwrYp2B3%2F-LlJhrKxjt91ZjL3K8m8%2F2-pd?alt=media&token=1fc13585-2933-444d-9be7-f5eafcc5744f" 
+
+// `https://firebasestorage.googleapis.com/v0/b/${object.bucket}/o/${object.selfLink.replace(`https://www.googleapis.com/storage/v1/b/${object.bucket}/o/`,'')}?alt=media&token=${object.metadata.firebaseStorageDownloadTokens}`
+// https://firebasestorage.googleapis.com/v0/b/nottmystyle-447aa.appspot.com/o/Users%2FLJ5iio1mhoQRoN0cZfGLPwrYp2B3%2FScreenshot%202019-07-23%20at%2012.23.12%20AM.png?alt=media&token=5a931d52-d936-4176-8573-7afababad4dd
+// https://www.googleapis.com/storage/v1/b/nottmystyle-447aa.appspot.com/o/Users%2FLJ5iio1mhoQRoN0cZfGLPwrYp2B3%2FScreenshot%202019-07-23%20at%2012.23.12%20AM.png
+// nottmystyle-447aa.appspot.com/Users/LJ5iio1mhoQRoN0cZfGLPwrYp2B3/Screenshot 2019-07-23 at 12.23.12 AM.png/1564775567012046
+
+// https://firebasestorage.googleapis.com/v0/b/nottmystyle-447aa.appspot.com/o/Users%2FLJ5iio1mhoQRoN0cZfGLPwrYp2B3%2F-LlImKBRAWxbgWiZkOrJ%2F0?alt=media&token=7b9ac507-955e-467d-b678-19f87b6781b9
+// exports.generateThumbnail = functions.storage.object().onFinalize(async (object) => {
+//     // ...
+//   });
+
+// TODO: Integrate FCM to send notifications
+exports.sendProductAcquisitionNotifications = functions.database.ref('Users/{uid}/notifications/itemsSold/{notification}').onWrite((snapshot, context) => {
+    admin.database().ref(`Users/${context.params.uid}/pushToken`).once("value", (dataFromReference) => {
+        var rawData = snapshot.after.val(); 
+        var {name, price, buyerName} = rawData;
+        var token = dataFromReference.val();
+        console.log(token);
+        const payload = {
+            notification: {
+             title: 'Item Sold!',
+             body: `Congratulations, your item ${name} has been purchased by ${buyerName} for £${price}. Use the in-app notifications to indicate when you have shipped the item. Once the buyer confirms they have received the item, we shall transfer your funds.`
+            }
+        };
+        // var message = {
+        //     data: {
+        //         score: '850',
+        //         time: '2:45'
+        //     },
+        //     token: token
+        // };
+        admin.messaging().sendToDevice(token,payload)
+        .then((response) => {
+          // Response is a message ID string.
+          console.log('Successfully sent message:', response);
+          return null
+        })
+        .catch((error) => {
+          console.log('Error sending message:', error);
+        });
+    })
+})
+
 //Function Numbah 8:
 //Delete a product from Products/ once it is deleted from Users/Products/Key
 //Not necessary since permanent product deletion is handled from client side, 
-//TODO: delete chatRoom product was associated with AND delete in cloud image storage
+//TODO: delete chatRoom that the product was associated with AND delete in cloud image storage
 // exports.deleteProduct = functions.database.ref('/Users/{uid}/products/{productKey}').onDelete(
 //     (snapshot, context) => {
 //         console.log(`User: ${context.params.uid} deleted all products`);
