@@ -376,7 +376,7 @@ exports.updateProducts = functions.database.ref('Users/{uid}/products').onWrite(
 
                         daysElapsed = timeSince(currentProduct.text.time);
                         //TODO: condition: daysElapsed >= 6
-                        var shouldReducePrice = (daysElapsed >= 6) && (currentProduct.text.sold === false) ? true : false;
+                        var shouldReducePrice = (daysElapsed >= 3) && (currentProduct.text.sold === false) ? true : false;
 
                         if(shouldReducePrice) {
                             var priceReductionNotificationUpdate = {};
@@ -393,30 +393,28 @@ exports.updateProducts = functions.database.ref('Users/{uid}/products').onWrite(
                             if(isFirstTime) {
                                 
                                 var notificationPostData = {
+                                    name: currentProduct.text.name,
+                                    brand: currentProduct.text.brand,
+                                    price: currentProduct.text.price, //the selling price the user agreed to post this item for
+                                    uri: currentProduct.uris.thumbnail[0],
+                                    daysElapsed: daysElapsed,
+                                    message: message,
+                                    // message: `Nobody has initiated a chat about, ${currentProduct.text.name} from ${currentProduct.text.brand} yet, since its submission on the market ${currentProduct.text.daysElapsed} days ago 🤔. Consider a price reduction from £${currentProduct.text.price} \u2192 £${Math.floor(suggestedDiscount*currentProduct.text.price)}?`,
 
-                                name: currentProduct.text.name,
-                                brand: currentProduct.text.brand,
-                                price: currentProduct.text.price, //the selling price the user agreed to post this item for
-                                uri: currentProduct.uris.thumbnail[0],
-                                daysElapsed: daysElapsed,
-                                message: message,
-                                // message: `Nobody has initiated a chat about, ${currentProduct.text.name} from ${currentProduct.text.brand} yet, since its submission on the market ${currentProduct.text.daysElapsed} days ago 🤔. Consider a price reduction from £${currentProduct.text.price} \u2192 £${Math.floor(suggestedDiscount*currentProduct.text.price)}?`,
-
-                                //pre-set a boolean to check if whether localNotification has been scheduled from client-side.
-                                uid: uid,
-                                key: key,
-                                //set this to true after it has been marked as true from client side, possibly faulty logic
-                                localNotificationSent: false,
-                                // localNotificationSent: d.Users[uid].notifications.priceReductions[key].localNotificationSent !== undefined ? d.Users[uid].notifications.priceReductions[key].localNotificationSent === true ? true : false : false,
-                                // localNotificationSent: d.Users[uid].notifications ? d.Users[uid].notifications.priceReductions ? d.Users[uid].notifications.priceReductions[key].localNotificationSent === true ? true : false : false : false,
-                                /// Should we just force empty address properties here?
-                                // address:
-                                
-                                //mark as unread
-                                // unreadCount: true,
-                                unreadCount: true,
-                                selected: false,
-                                
+                                    //pre-set a boolean to check if whether localNotification has been scheduled from client-side.
+                                    uid: uid,
+                                    key: key,
+                                    //set this to true after it has been marked as true from client side, possibly faulty logic
+                                    localNotificationSent: false,
+                                    // localNotificationSent: d.Users[uid].notifications.priceReductions[key].localNotificationSent !== undefined ? d.Users[uid].notifications.priceReductions[key].localNotificationSent === true ? true : false : false,
+                                    // localNotificationSent: d.Users[uid].notifications ? d.Users[uid].notifications.priceReductions ? d.Users[uid].notifications.priceReductions[key].localNotificationSent === true ? true : false : false : false,
+                                    /// Should we just force empty address properties here?
+                                    // address:
+                                    
+                                    //mark as unread
+                                    // unreadCount: true,
+                                    unreadCount: true,
+                                    selected: false,
                                 }
                                 //now update the singular sub-branch with entire object as it's the first time
                                 priceReductionNotificationUpdate[currentNotificationRef] = notificationPostData;
@@ -640,7 +638,36 @@ exports.updateAppUsage = functions.database.ref('Users/{uid}/profile/status').on
 //     // ...
 //   });
 
-// TODO: Integrate FCM to send notifications
+exports.sendPriceReductionNotifications = functions.database.ref('Users/{uid}/notifications/priceReductions/{notification}').onWrite((snapshot, context) => {
+
+    var rawData = snapshot.after.val(); 
+    if(rawData.unreadCount === true) {
+        admin.database().ref(`Users/${context.params.uid}/pushToken`).once("value", (dataFromReference) => {
+        
+            var {name, message} = rawData;
+            var token = dataFromReference.val();
+            console.log(token);
+            const payload = {
+                notification: {
+                 title: `Reduce Price of ${name}`,
+                 body: message
+                }
+            };
+            
+            admin.messaging().sendToDevice(token,payload)
+            .then((response) => {
+              // Response is a message ID string.
+              console.log('Successfully sent message:', response);
+              return null
+            })
+            .catch((error) => {
+              console.log('Error sending message:', error);
+            });
+        })
+    }
+    
+})
+
 exports.sendProductAcquisitionNotifications = functions.database.ref('Users/{uid}/notifications/itemsSold/{notification}').onWrite((snapshot, context) => {
     admin.database().ref(`Users/${context.params.uid}/pushToken`).once("value", (dataFromReference) => {
         var rawData = snapshot.after.val(); 
@@ -670,6 +697,87 @@ exports.sendProductAcquisitionNotifications = functions.database.ref('Users/{uid
           console.log('Error sending message:', error);
         });
     })
+})
+
+exports.sendProductPurchaseNotifications = functions.database.ref('Users/{uid}/notifications/purchaseReceipts/{notification}').onWrite((snapshot, context) => {
+    admin.database().ref(`Users/${context.params.uid}/pushToken`).once("value", (dataFromReference) => {
+        var rawData = snapshot.after.val(); 
+        var {name, sellerName, postOrNah} = rawData;
+        var token = dataFromReference.val(); 
+        const payload = {
+            notification: {
+             title: 'Purchase Receipt!',
+            //  body: "Nice job, you've managed"
+             body: postOrNah === 'post' ? `Your product: ${name} is being posted over by ${sellerName}. Please contact us at nottmystyle.help@gmail.com if it does not arrive within 2 weeks.` : `Please get in touch with ${sellerName} regarding your acquisition of their ${name}.`
+            }
+        };
+        // var message = {
+        //     data: {
+        //         score: '850',
+        //         time: '2:45'
+        //     },
+        //     token: token
+        // };
+        admin.messaging().sendToDevice(token,payload)
+        .then((response) => {
+          // Response is a message ID string.
+          console.log('Successfully sent message:', response);
+          return null
+        })
+        .catch((error) => {
+          console.log('Error sending message:', error);
+        });
+    })
+})
+
+exports.updateOrders = functions.database.ref('Users/{uid}/notifications/itemsSold/{notification}').onWrite((snapshot, context)=>{
+    var notificationData = snapshot.after.val();
+    var productId = context.params.notification;
+    console.log(productId);
+    var {buyerId, sellerId, buyerName, sellerName, uri, deliveryStatus} = notificationData;
+    admin.database().ref('/Users/').once('value', (dataFromReference) => {
+        var Users = dataFromReference.val();
+        // Users = Users.val();
+        // let productId = Object.entries(Users[sellerId].notifications.itemsSold).find((entry) => {
+        //     return entry[1] = notificationData;
+        // });
+        //TODO: undefined query
+        let productData = Users[sellerId].products[productId].text;
+        let {price, post_price, name} = productData;
+        // console.log(notificationData);
+        let promiseOne = admin.auth().getUser(buyerId);
+        let promiseTwo = admin.auth().getUser(sellerId);
+        Promise.all([promiseOne,promiseTwo])
+        .then((data)=> {
+            var buyerEmail = data[0].email;
+            var sellerEmail = data[1].email;
+            var postData = {
+                buyerName,
+                buyerEmail,
+                sellerName,
+                sellerEmail,
+                uri,
+                deliveryStatus,
+                productId,
+                productName: name, 
+                productPrice: price,
+                productPostPrice: post_price,
+            }
+            var updates = {};
+            updates['/Orders/' + productKey + '/'] = postData;
+            admin.database().ref().update(updates);
+            return null
+        })
+        .catch(err => {
+    
+            console.log(err);
+            return null
+        })
+            
+    })
+    
+    // buyerRecord = await ;
+    // sellerRecord = await ;
 })
 
 //Function Numbah 8:
