@@ -1,2 +1,4 @@
 node_modules/
 functions/keys.js
+functions/node_modules/
+functions/google_service_account.json

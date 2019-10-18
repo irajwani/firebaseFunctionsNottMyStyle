@@ -1,3 +1,4 @@
+require('dotenv').config();
 const functions = require('firebase-functions');
 // const Chatkit = require('@pusher/chatkit-server');
 
@@ -10,7 +11,7 @@ const functions = require('firebase-functions');
 
 // const fs = require('fs-extra');
 
-// const {CHATKIT_SECRET_KEY, CHATKIT_INSTANCE_LOCATOR} = require('./keys.js')
+const {gmailConfig} = require('./keys.js')
 // // ///Users/{uid}/{profile}/uri/
 // const chatkit = new Chatkit.default({
 //     instanceLocator: CHATKIT_INSTANCE_LOCATOR,
@@ -18,6 +19,22 @@ const functions = require('firebase-functions');
 // });
 // The Firebase Admin SDK to access the Firebase Realtime Database.
 const admin = require('firebase-admin');
+
+const nodemailer = require('nodemailer');
+const hbs = require('nodemailer-handlebars');
+
+// Step 1
+let transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: gmailConfig
+});
+
+// Step 2
+transporter.use('compile', hbs({
+    viewEngine: 'express-handlebars',
+    viewPath: './views/'
+}));
+
 admin.initializeApp();
 
 
@@ -88,6 +105,36 @@ function removeFalsyValuesFrom(object) {
 //         //2. pusher chatkit room
 
 // })
+
+//FUNCTION NUMBAH 1 Additional Action
+exports.sendWelcomeEmail =  functions.database.ref('/Users/{uid}/profile/').onCreate((snapshot, context)=> {
+    admin.auth().getUser(context.params.uid)
+    .then(userRecord => {
+        let sendTo = userRecord.email;
+        let name = userRecord.displayName;
+        console.log(sendTo, name);
+        // let mailOptions = {
+        //     from: 'nottmystyle.help@gmail.com', // TODO: email sender
+        //     to: sendTo, // TODO: email receiver
+        //     subject: `${name}, Welcome to NottMyStyle`,
+        //     text: 'Wooohooo it works!!',
+        //     template: 'welcome',
+        //     context: {
+        //         name: 'Accime Esterling'
+        //     } // send extra values to template
+        // };
+        
+        // // Step 4
+        // transporter.sendMail(mailOptions, (err, data) => {
+        //     if (err) {
+        //         return log('Error occurs');
+        //     }
+        //     return log('Email sent!!!');
+        // });
+        return null
+    })
+    .catch((e)=>console.log('failed to send because ' + e))
+})
 
 //FUNCTION NUMBAH 1 :
 //TODO: reawaken
@@ -500,6 +547,7 @@ exports.updateProducts = functions.database.ref('Users/{uid}/products').onWrite(
     }
 )
 
+//TODO: this chain does not work
 exports.updateAppUsage = functions.database.ref('Users/{uid}/profile/status').onWrite((snapshot, context) => {
     if(snapshot.after.val() === "online") {
         let {uid} = context.params;
@@ -663,72 +711,85 @@ exports.sendPriceReductionNotifications = functions.database.ref('Users/{uid}/no
             .catch((error) => {
               console.log('Error sending message:', error);
             });
+
+            return null
         })
     }
+    return null
     
 })
 
-exports.sendProductAcquisitionNotifications = functions.database.ref('Users/{uid}/notifications/itemsSold/{notification}').onWrite((snapshot, context) => {
-    admin.database().ref(`Users/${context.params.uid}/pushToken`).once("value", (dataFromReference) => {
-        var rawData = snapshot.after.val(); 
-        var {name, price, buyerName} = rawData;
-        var token = dataFromReference.val();
-        console.log(token);
-        const payload = {
-            notification: {
-             title: 'Item Sold!',
-             body: `Congratulations, your item ${name} has been purchased by ${buyerName} for £${price}. Use the in-app notifications to indicate when you have shipped the item. Once the buyer confirms they have received the item, we shall transfer your funds.`
-            }
-        };
-        // var message = {
-        //     data: {
-        //         score: '850',
-        //         time: '2:45'
-        //     },
-        //     token: token
-        // };
-        admin.messaging().sendToDevice(token,payload)
-        .then((response) => {
-          // Response is a message ID string.
-          console.log('Successfully sent message:', response);
-          return null
-        })
-        .catch((error) => {
-          console.log('Error sending message:', error);
-        });
-    })
-})
+// exports.sendNoobNotification = 
 
-exports.sendProductPurchaseNotifications = functions.database.ref('Users/{uid}/notifications/purchaseReceipts/{notification}').onWrite((snapshot, context) => {
-    admin.database().ref(`Users/${context.params.uid}/pushToken`).once("value", (dataFromReference) => {
-        var rawData = snapshot.after.val(); 
-        var {name, sellerName, postOrNah} = rawData;
-        var token = dataFromReference.val(); 
-        const payload = {
-            notification: {
-             title: 'Purchase Receipt!',
-            //  body: "Nice job, you've managed"
-             body: postOrNah === 'post' ? `Your product: ${name} is being posted over by ${sellerName}. Please contact us at nottmystyle.help@gmail.com if it does not arrive within 2 weeks.` : `Please get in touch with ${sellerName} regarding your acquisition of their ${name}.`
-            }
-        };
-        // var message = {
-        //     data: {
-        //         score: '850',
-        //         time: '2:45'
-        //     },
-        //     token: token
-        // };
-        admin.messaging().sendToDevice(token,payload)
-        .then((response) => {
-          // Response is a message ID string.
-          console.log('Successfully sent message:', response);
-          return null
-        })
-        .catch((error) => {
-          console.log('Error sending message:', error);
-        });
-    })
-})
+// exports.sendProductAcquisitionNotifications = functions.database.ref('Users/{uid}/notifications/itemsSold/{notification}').onWrite((snapshot, context) => {
+//     admin.database().ref(`Users/${context.params.uid}/pushToken`).once("value", (dataFromReference) => {
+//         var rawData = snapshot.after.val(); 
+//         var {name, price, buyerName} = rawData;
+//         var token = dataFromReference.val();
+//         console.log(token);
+//         const payload = {
+//             notification: {
+//              title: 'Item Sold!',
+//              body: `Congratulations, your item ${name} has been purchased by ${buyerName} for £${price}. Use the in-app notifications to indicate when you have shipped the item. Once the buyer confirms they have received the item, we shall transfer your funds.`
+//             }
+//         };
+//         // var message = {
+//         //     data: {
+//         //         score: '850',
+//         //         time: '2:45'
+//         //     },
+//         //     token: token
+//         // };
+//         admin.messaging().sendToDevice(token,payload)
+//         .then((response) => {
+//           // Response is a message ID string.
+//           console.log('Successfully sent message:', response);
+//           return null
+//         })
+//         .catch((error) => {
+//           console.log('Error sending message:', error);
+//         });
+
+//         return null
+//     })
+//     return null
+// })
+
+// exports.sendProductPurchaseNotifications = functions.database.ref('Users/{uid}/notifications/purchaseReceipts/{notification}').onWrite((snapshot, context) => {
+    
+//     admin.database().ref(`Users/${context.params.uid}/pushToken`).once("value", (dataFromReference) => {
+//         var rawData = snapshot.after.val(); 
+//         var {name, sellerName, postOrNah} = rawData;
+//         var token = dataFromReference.val(); 
+//         const payload = {
+//             notification: {
+//              title: 'Purchase Receipt!',
+//             //  body: "Nice job, you've managed"
+//              body: postOrNah === 'post' ? `Your product: ${name} is being posted over by ${sellerName}. Please contact us at nottmystyle.help@gmail.com if it does not arrive within 2 weeks.` : `Please get in touch with ${sellerName} regarding your acquisition of their ${name}.`
+//             }
+//         };
+//         // var message = {
+//         //     data: {
+//         //         score: '850',
+//         //         time: '2:45'
+//         //     },
+//         //     token: token
+//         // };
+//         admin.messaging().sendToDevice(token,payload)
+//         .then((response) => {
+//           // Response is a message ID string.
+//           console.log('Successfully sent message:', response);
+//           return null
+//         })
+//         .catch((error) => {
+//           console.log('Error sending message:', error);
+//         });
+
+//         return null
+//     })
+
+//     return null
+// })
 
 exports.updateOrders = functions.database.ref('Users/{uid}/notifications/itemsSold/{notification}').onWrite((snapshot, context)=>{
     var notificationData = snapshot.after.val();
@@ -743,10 +804,14 @@ exports.updateOrders = functions.database.ref('Users/{uid}/notifications/itemsSo
         // });
         //TODO: undefined query
         let productData = Users[sellerId].products[productId].text;
+        console.log(Users[sellerId]);
+        console.log(Users[sellerId].products);
+        console.log(Users[sellerId].products);
         let {price, post_price, name} = productData;
         // console.log(notificationData);
         let promiseOne = admin.auth().getUser(buyerId);
         let promiseTwo = admin.auth().getUser(sellerId);
+
         Promise.all([promiseOne,promiseTwo])
         .then((data)=> {
             var buyerEmail = data[0].email;
@@ -764,8 +829,9 @@ exports.updateOrders = functions.database.ref('Users/{uid}/notifications/itemsSo
                 productPostPrice: post_price,
             }
             var updates = {};
-            updates['/Orders/' + productKey + '/'] = postData;
+            updates['/Orders/' + productId + '/'] = postData;
             admin.database().ref().update(updates);
+
             return null
         })
         .catch(err => {
