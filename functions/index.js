@@ -21,18 +21,32 @@ const {gmailConfig} = require('./keys.js')
 const admin = require('firebase-admin');
 
 const nodemailer = require('nodemailer');
-const hbs = require('nodemailer-handlebars');
+const hbs = require('nodemailer-express-handlebars');
 
 // Step 1
 let transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: gmailConfig
+    // service: 'gmail',
+    auth: gmailConfig,
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    // auth: {
+    //     xoauth2: gmailConfig
+    // }
 });
+
+// console.log(transporter);
 
 // Step 2
 transporter.use('compile', hbs({
-    viewEngine: 'express-handlebars',
-    viewPath: './views/'
+    viewEngine: {
+        extName: '.handlebars',
+        partialsDir: './views/partials',
+        layoutsDir: './views/layouts',
+        defaultLayout: '',
+      },
+    viewPath: './views',
+    extName: '.handlebars',
 }));
 
 admin.initializeApp();
@@ -106,31 +120,38 @@ function removeFalsyValuesFrom(object) {
 
 // })
 
-//FUNCTION NUMBAH 1 Additional Action
+//Additional Action for FUNCTION NUMBAH 1 
 exports.sendWelcomeEmail =  functions.database.ref('/Users/{uid}/profile/').onCreate((snapshot, context)=> {
     admin.auth().getUser(context.params.uid)
     .then(userRecord => {
         let sendTo = userRecord.email;
-        let name = userRecord.displayName;
-        console.log(sendTo, name);
-        // let mailOptions = {
-        //     from: 'nottmystyle.help@gmail.com', // TODO: email sender
-        //     to: sendTo, // TODO: email receiver
-        //     subject: `${name}, Welcome to NottMyStyle`,
-        //     text: 'Wooohooo it works!!',
-        //     template: 'welcome',
-        //     context: {
-        //         name: 'Accime Esterling'
-        //     } // send extra values to template
-        // };
+        let name = snapshot.val().name.split(" ")[0];
+        // console.log(sendTo, name);
+
+        //STEP 3
+        let mailOptions = {
+            from: 'nottmystyleapp@gmail.com', // TODO: email sender
+            to: sendTo, // TODO: email receiver
+            subject: `${name}, Welcome to NottMyStyle`,
+            text: 'Wooohooo it works!!',
+            template: 'layouts/welcome',
+            context: {
+                name: 'Accime Esterling'
+            } // send extra values to template
+        };
+        //STEP 4
+        transporter.sendMail(mailOptions, (err, data) => {
+            if (err) {
+                console.log(err);
+                console.log('Error occurs');
+            }
+            else {
+                console.log(data);
+                console.log('Email sent!!!');
+            }
         
-        // // Step 4
-        // transporter.sendMail(mailOptions, (err, data) => {
-        //     if (err) {
-        //         return log('Error occurs');
-        //     }
-        //     return log('Email sent!!!');
-        // });
+        })
+
         return null
     })
     .catch((e)=>console.log('failed to send because ' + e))

@@ -1,0 +1,17 @@
+html, body {
+    height: 100%;
+    margin: 0;
+}
+
+p {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 30px;
+    color: white;
+}
+
+.container {
+    display: flex;
+    height: 800px;
+    width: "100%";
+    background-color:green;
+}
