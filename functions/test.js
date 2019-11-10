@@ -4,7 +4,7 @@ const functions = require('firebase-functions');
 // const Chatkit = require('@pusher/chatkit-server');
 
 // const Storage = require('@google-cloud/storage');
-// const gcs = Storage();
+// const gcs = Storage(); 
 
 // const {tmpdir} = require('os');
 // const {join, dirname} = require('path');
@@ -77,7 +77,7 @@ let uid = "LJ5iio1mhoQRoN0cZfGLPwrYp2B3"
 admin.auth().getUser(uid)
 .then(userRecord => {
     let sendTo = userRecord.email;
-    let name = "Imad Rajwani";
+    let name = "Imad";
     // console.log(sendTo, name);
     let mailOptions = {
         from: 'nottmystyleapp@gmail.com', // TODO: email sender

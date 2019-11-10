@@ -1,5 +1,6 @@
 require('dotenv').config();
 const functions = require('firebase-functions');
+const request = require('request');
 // const Chatkit = require('@pusher/chatkit-server');
 
 // const Storage = require('@google-cloud/storage');
@@ -10,8 +11,10 @@ const functions = require('firebase-functions');
 // const sharp = require('sharp');
 
 // const fs = require('fs-extra');
+// const NODE_API =  "https://calm-coast-12842.herokuapp.com";
+const NODE_API = "https://glacial-island-26545.herokuapp.com";
 
-const {gmailConfig} = require('./keys.js')
+// const {gmailConfig} = require('./keys.js')
 // // ///Users/{uid}/{profile}/uri/
 // const chatkit = new Chatkit.default({
 //     instanceLocator: CHATKIT_INSTANCE_LOCATOR,
@@ -20,34 +23,34 @@ const {gmailConfig} = require('./keys.js')
 // The Firebase Admin SDK to access the Firebase Realtime Database.
 const admin = require('firebase-admin');
 
-const nodemailer = require('nodemailer');
-const hbs = require('nodemailer-express-handlebars');
+// const nodemailer = require('nodemailer');
+// const hbs = require('nodemailer-express-handlebars');
 
-// Step 1
-let transporter = nodemailer.createTransport({
-    // service: 'gmail',
-    auth: gmailConfig,
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    // auth: {
-    //     xoauth2: gmailConfig
-    // }
-});
+// // Step 1
+// let transporter = nodemailer.createTransport({
+//     // service: 'gmail',
+//     auth: gmailConfig,
+//     host: 'smtp.gmail.com',
+//     port: 465,
+//     secure: true,
+//     // auth: {
+//     //     xoauth2: gmailConfig
+//     // }
+// });
 
-// console.log(transporter);
+// // console.log(transporter);
 
-// Step 2
-transporter.use('compile', hbs({
-    viewEngine: {
-        extName: '.handlebars',
-        partialsDir: './views/partials',
-        layoutsDir: './views/layouts',
-        defaultLayout: '',
-      },
-    viewPath: './views',
-    extName: '.handlebars',
-}));
+// // Step 2
+// transporter.use('compile', hbs({
+//     viewEngine: {
+//         extName: '.handlebars',
+//         partialsDir: './views/partials',
+//         layoutsDir: './views/layouts',
+//         defaultLayout: '',
+//       },
+//     viewPath: './views',
+//     extName: '.handlebars',
+// }));
 
 admin.initializeApp();
 
@@ -121,40 +124,21 @@ function removeFalsyValuesFrom(object) {
 // })
 
 //Additional Action for FUNCTION NUMBAH 1 
-exports.sendWelcomeEmail =  functions.database.ref('/Users/{uid}/profile/').onCreate((snapshot, context)=> {
-    admin.auth().getUser(context.params.uid)
-    .then(userRecord => {
-        let sendTo = userRecord.email;
-        let name = snapshot.val().name.split(" ")[0];
-        // console.log(sendTo, name);
-
-        //STEP 3
-        let mailOptions = {
-            from: 'nottmystyleapp@gmail.com', // TODO: email sender
-            to: sendTo, // TODO: email receiver
-            subject: `${name}, Welcome to NottMyStyle`,
-            text: 'Wooohooo it works!!',
-            template: 'layouts/welcome',
-            context: {
-                name: 'Accime Esterling'
-            } // send extra values to template
-        };
-        //STEP 4
-        transporter.sendMail(mailOptions, (err, data) => {
-            if (err) {
-                console.log(err);
-                console.log('Error occurs');
-            }
-            else {
-                console.log(data);
-                console.log('Email sent!!!');
-            }
+exports.sendWelcomeEmail =  functions.database.ref('/Users/{uid}/profile/').onCreate((snapshot, context) => {
+    request.post(NODE_API + '/sendWelcomeEmail', {
+        data: {
+            uid: context.params.uid
+        }
+        }, (error, res, body) => {
+        if (error) {
+            console.log(error)
+            return
+        }
+        console.log(`statusCode: ${res.statusCode}`)
+        console.log(body)
         
         })
-
-        return null
-    })
-    .catch((e)=>console.log('failed to send because ' + e))
+    return null
 })
 
 //FUNCTION NUMBAH 1 :
@@ -245,13 +229,23 @@ exports.deleteProductFromProducts = functions.database.ref('/Users/{uid}/product
 //Problem: When user deletes all products, it wipes away the whole products branch. 
 //Fix: This func creates an empty products branch for the user.
 
+//TODO: This function also prevents simple deletion of a user which is not okay
 exports.updateEmptyProducts = functions.database.ref('/Users/{uid}/products').onDelete(
     (snapshot, context) => {
         console.log(`User: ${context.params.uid} deleted all products`);
         var updates = {};
         
         updates['/Users/' + context.params.uid + '/products/'] = '';
-        admin.database().ref().update(updates);
+        admin.auth().getUser(context.params.uid)
+        .then(userRecord => {
+            admin.database().ref().update(updates);
+            return null
+        })
+        .catch(err => {
+            console.log(err, 'no need to update, this user does not exist in Auth');
+            return null
+        })
+        
 
         return null;
     }
